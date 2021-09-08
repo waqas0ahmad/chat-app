@@ -11,16 +11,20 @@ const { sockSrv } = require("../utils/socket.srvice");
 const createAccount = async function (req, res, next) {
   const data = req.body;
   if (data.Name && data.Number && data.Password) {
+    let users = await getUser(data.Number);
+    if(users.success&&users.data.length>0){
+      return res.Bad({},"User already exist with same phone number.");
+    }
     let query = 'INSERT INTO `account` (`name`,`profile`,`mobile_number`,`password`) VALUES ?';
     data.Password = bcrypt.hashSync(data.Password, 10);
     let d = [[data.Name, data.Profile, data.Number, data.Password]];
     const result = await executeSQL(query, [d]);
     if (result.success == true) {
-      const users = await getUser(data.Number);
+      users = await getUser(data.Number);
       if (users.success == true) {
         const token = sign({ id: users.data[0]["id"], name: users.data[0]["name"], name: users.data[0]["mobile_number"] });
         users.data[0]["token"] = token;
-        return res.Ok(users.data[0]);
+        return res.Ok(users.data[0],"Account created successfully.");
       }
     }
     return res.Bad({});
@@ -28,8 +32,14 @@ const createAccount = async function (req, res, next) {
     res.Bad(req.body, "Provide all fields");
   }
 }
-const getUser = function (number) {
-  return executeSQL(`select * from account where mobile_number = ?`, [number]);
+const getUser = async function (number) {
+  const user = await executeSQL(`select Id,Name,Profile,mobile_number Number,Password from account where mobile_number = ?`, [number]);
+  if(user.success&&user.data.length>0){
+    //return user;
+  }else{
+    user.success =false;
+  }
+  return user;
 }
 /**
  * 
@@ -42,15 +52,15 @@ const login = async function (req, res, next) {
   if (data.Number && data.Password) {
     const users = await getUser(data.Number);
     if (users.success == true) {
-      const matched = bcrypt.compareSync(data.Password, users.data[0]["password"])
+      const matched = bcrypt.compareSync(data.Password, users.data[0]["Password"])
       if (matched) {
-        const token = sign({ id: users.data[0]["id"], name: users.data[0]["name"], name: users.data[0]["mobile_number"] });
-        users.data[0]["token"] = token;
-        return res.Ok(users.data[0]);
+        const token = sign({ id: users.data[0]["Id"], name: users.data[0]["Name"], name: users.data[0]["Number"] });
+        users.data[0]["Token"] = token;
+        return res.Ok(users.data[0],"Logged in successfully.");
       }
 
     }
-    return res.Bad({});
+    return res.Bad({},"Invalid phone number or password.");
   } else {
     res.Bad(req.body, "Provide all fields");
   }
